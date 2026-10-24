@@ -38,6 +38,19 @@ RE:CODE is **not** another project-management or task-management tool. It is a s
 - **Failure Patterns** — See recurring reasons behind stalled projects and turn them into future guardrails.
 - **Seeded Demo Data** — The app opens with example projects so the main experience is immediately testable.
 
+## Canvas Protocol
+
+The mid-hackathon Variant Factor introduces a drag-and-drop interaction model for primary actions. Data cards are dragged into clearly labelled Action Zones instead of using standard submit/save controls.
+
+- Drag a project card to **Inspect**.
+- Drag **New Autopsy** to **Start Autopsy**.
+- Drag a DNA card to **Stage DNA**.
+- Drag **Commit Autopsy** to **Commit Record**.
+- Drag **Synthesize MVP** to **Synthesize**.
+- Drag **Failure Patterns** to **View Patterns**.
+
+The original product purpose remains unchanged: RE:CODE still helps users understand, recover, and recombine unfinished work.
+
 ## Revival Paths
 
 The rule engine recommends one of five paths:

@@ -17,7 +17,10 @@ import {
   Code2,
   Layout,
   Lightbulb,
-  BookOpen
+  BookOpen,
+  MousePointer2,
+  Target,
+  GripVertical
 } from "lucide-react";
 import {
   INITIAL_PROJECTS,
@@ -47,6 +50,7 @@ export default function App() {
   const [selectedProject, setSelectedProject] = useState(null);
   const [filterReason, setFilterReason] = useState("ALL");
   const [isSynthesizing, setIsSynthesizing] = useState(false);
+  const [dragOverZone, setDragOverZone] = useState(null);
 
   // DNA Recombination Builder State
   const [selectedDnaIds, setSelectedDnaIds] = useState(["dna-101", "dna-201", "dna-301"]);
@@ -89,6 +93,80 @@ export default function App() {
     e.currentTarget.style.setProperty("--x", `${x}px`);
     e.currentTarget.style.setProperty("--y", `${y}px`);
   };
+
+  // Canvas Protocol: primary actions happen by dragging cards into zones.
+  const beginDrag = payload => event => {
+    event.dataTransfer.effectAllowed = "move";
+    event.dataTransfer.setData("application/recode-action", JSON.stringify(payload));
+  };
+
+  const handleCanvasDrop = (event, zone) => {
+    event.preventDefault();
+    setDragOverZone(null);
+    let payload;
+    try {
+      payload = JSON.parse(event.dataTransfer.getData("application/recode-action"));
+    } catch {
+      return;
+    }
+
+    if (zone === "inspect" && payload.type === "project") {
+      setSelectedProject(payload.project);
+      return;
+    }
+    if (zone === "autopsy" && payload.type === "open-autopsy") {
+      setWizardStep(1);
+      setActiveTab("autopsy");
+      return;
+    }
+    if (zone === "stage-dna" && payload.type === "dna") {
+      toggleDnaSelection(payload.dna.id);
+      return;
+    }
+    if (zone === "stage-draft-dna" && payload.type === "draft-dna") {
+      handleAddDnaToDraft();
+      return;
+    }
+    if (zone === "save" && payload.type === "save-autopsy") {
+      handleFinishAutopsy();
+      return;
+    }
+    if (zone === "synthesize" && payload.type === "synthesize") {
+      handleCreateRecombination();
+      return;
+    }
+    if (zone === "dna-lab" && payload.type === "go-dna") {
+      setSelectedProject(null);
+      setActiveTab("dna");
+      return;
+    }
+    if (zone === "patterns" && payload.type === "patterns") {
+      setActiveTab("patterns");
+    }
+  };
+
+  const canvasZone = (id, label, hint, accepts) => (
+    <div
+      onDragOver={event => {
+        event.preventDefault();
+        event.dataTransfer.dropEffect = "move";
+        setDragOverZone(id);
+      }}
+      onDragLeave={() => setDragOverZone(null)}
+      onDrop={event => handleCanvasDrop(event, id)}
+      className={`min-h-[74px] rounded-xl border border-dashed p-3 transition ${
+        dragOverZone === id
+          ? "border-teal-300 bg-teal-400/15 scale-[1.02]"
+          : "border-zinc-700 bg-zinc-950/60"
+      }`}
+    >
+      <div className="flex items-center gap-2 text-xs font-semibold text-white">
+        <Target className="w-3.5 h-3.5 text-teal-400" />
+        {label}
+      </div>
+      <p className="text-[10px] text-zinc-500 mt-1">Drop {accepts} here</p>
+    </div>
+  );
 
   // Derived Stats
   const allDnaParts = useMemo(() => {
@@ -193,8 +271,7 @@ export default function App() {
     );
   };
 
-  const handleCreateRecombination = (e) => {
-    e.preventDefault();
+  const handleCreateRecombination = () => {
     if (!newSynthesisTitle.trim() || selectedDnaIds.length < 2) return;
     setIsSynthesizing(true);
     setTimeout(() => {
@@ -284,6 +361,70 @@ export default function App() {
         </div>
       </header>
 
+      {/* Surprise Challenge: Canvas Protocol */}
+      <section className="max-w-7xl mx-auto w-full px-4 sm:px-6 pt-5 relative z-10">
+        <div className="rounded-2xl border border-teal-500/30 bg-teal-500/[0.06] p-4 sm:p-5 shadow-lg shadow-teal-950/20">
+          <div className="flex flex-wrap items-start justify-between gap-4">
+            <div>
+              <div className="flex items-center gap-2 text-xs mono uppercase tracking-wider text-teal-300">
+                <MousePointer2 className="w-4 h-4" />
+                Canvas Protocol
+              </div>
+              <h2 className="text-base font-bold text-white mt-1">Drag data cards into Action Zones</h2>
+              <p className="text-xs text-zinc-400 mt-1 max-w-2xl">
+                Primary actions are now performed through drag and drop. Do not click a submit or save button: move the relevant card to its matching zone.
+              </p>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              <div
+                draggable
+                onDragStart={beginDrag({ type: "open-autopsy" })}
+                className="flex items-center gap-2 cursor-grab active:cursor-grabbing rounded-lg border border-teal-500/30 bg-zinc-950/80 px-3 py-2 text-[11px] text-teal-200"
+              >
+                <GripVertical className="w-3.5 h-3.5 text-teal-400" /> New Autopsy
+              </div>
+              <div
+                draggable
+                onDragStart={beginDrag({ type: "patterns" })}
+                className="flex items-center gap-2 cursor-grab active:cursor-grabbing rounded-lg border border-amber-500/30 bg-zinc-950/80 px-3 py-2 text-[11px] text-amber-200"
+              >
+                <GripVertical className="w-3.5 h-3.5 text-amber-400" /> Failure Patterns
+              </div>
+              {activeTab === "autopsy" && wizardStep === 5 && (
+                <div
+                  draggable
+                  onDragStart={beginDrag({ type: "save-autopsy" })}
+                  className="flex items-center gap-2 cursor-grab active:cursor-grabbing rounded-lg border border-emerald-500/30 bg-zinc-950/80 px-3 py-2 text-[11px] text-emerald-200"
+                >
+                  <GripVertical className="w-3.5 h-3.5 text-emerald-400" /> Commit Autopsy
+                </div>
+              )}
+              {activeTab === "dna" && (
+                <div
+                  draggable
+                  onDragStart={beginDrag({ type: "synthesize" })}
+                  className="flex items-center gap-2 cursor-grab active:cursor-grabbing rounded-lg border border-purple-500/30 bg-zinc-950/80 px-3 py-2 text-[11px] text-purple-200"
+                >
+                  <GripVertical className="w-3.5 h-3.5 text-purple-400" /> Synthesize MVP
+                </div>
+              )}
+            </div>
+          </div>
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2 mt-4">
+            {canvasZone("inspect", "Inspect", "a project card", "a project card")}
+            {canvasZone("autopsy", "Start Autopsy", "the New Autopsy card", "the New Autopsy card")}
+            {canvasZone("stage-dna", "Stage DNA", "a DNA card", "a DNA card")}
+            {canvasZone("save", "Commit Record", "the Commit Autopsy card", "the Commit Autopsy card")}
+            {canvasZone("synthesize", "Synthesize", "the Synthesize MVP card", "the Synthesize MVP card")}
+            {canvasZone("patterns", "View Patterns", "the Failure Patterns card", "the Failure Patterns card")}
+            {activeTab === "autopsy" && wizardStep === 4 &&
+              canvasZone("stage-draft-dna", "Stage New DNA", "the draft DNA card", "the draft DNA card")}
+            {selectedProject &&
+              canvasZone("dna-lab", "Open DNA Lab", "the dossier card", "the dossier card")}
+          </div>
+        </div>
+      </section>
+
       {/* Telemetry Strip */}
       <section className="max-w-7xl mx-auto w-full px-4 sm:px-6 pt-7 pb-3 relative z-10">
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
@@ -363,13 +504,9 @@ export default function App() {
                     <option key={r} value={r}>{r}</option>
                   ))}
                 </select>
-                <button
-                  onClick={() => setActiveTab("autopsy")}
-                  className="flex items-center gap-1.5 bg-teal-400 hover:bg-teal-300 text-zinc-950 font-semibold text-xs px-3.5 py-2 rounded-lg transition shadow-sm"
-                >
-                  <Plus className="w-3.5 h-3.5 stroke-[2.5]" />
-                  <span>New Autopsy</span>
-                </button>
+                <span className="text-[11px] mono text-teal-300 border border-teal-500/30 bg-teal-500/10 px-3 py-2 rounded-lg">
+                  Drag “New Autopsy” to Start Autopsy above
+                </span>
               </div>
             </div>
 
@@ -380,9 +517,10 @@ export default function App() {
                   <div
                     key={project.id}
                     onMouseMove={handleCardMouseMove}
-                    onClick={() => setSelectedProject(project)}
+                    draggable
+                    onDragStart={beginDrag({ type: "project", project })}
                     style={{ animationDelay: `${idx * 65}ms` }}
-                    className="spotlight-card animate-fade-up cursor-pointer rounded-xl bg-zinc-900/60 border border-zinc-800/90 p-5 flex flex-col justify-between"
+                    className="spotlight-card animate-fade-up cursor-grab active:cursor-grabbing rounded-xl bg-zinc-900/60 border border-zinc-800/90 p-5 flex flex-col justify-between"
                   >
                     <div className="space-y-4">
                       <div className="flex items-start justify-between gap-2">
@@ -445,6 +583,7 @@ export default function App() {
                       </div>
                     </div>
 
+                    <div className="text-[10px] mono text-teal-400/80 mt-3">Drag this project card → Inspect zone</div>
                     <div className="mt-5 pt-3 border-t border-zinc-800/50 flex items-center justify-between text-[11px] mono text-zinc-500">
                       <span className="flex items-center gap-1">
                         <Calendar className="w-3 h-3" /> {project.startedDate}
@@ -527,16 +666,15 @@ export default function App() {
                   </div>
 
                   <div className="flex justify-end pt-3 border-t border-zinc-800">
-                    <button
-                      onClick={() => {
-                        setSelectedProject(null);
-                        setActiveTab("dna");
-                      }}
-                      className="flex items-center gap-2 bg-zinc-100 hover:bg-white text-zinc-950 font-semibold text-xs px-4 py-2 rounded-lg transition"
+                    <div
+                      draggable
+                      onDragStart={beginDrag({ type: "go-dna" })}
+                      className="flex items-center gap-2 cursor-grab active:cursor-grabbing bg-zinc-100 text-zinc-950 font-semibold text-xs px-4 py-2 rounded-lg"
                     >
-                      <span>Open Parts in DNA Recombination Lab</span>
+                      <GripVertical className="w-3.5 h-3.5" />
+                      <span>Drag dossier → DNA Lab zone</span>
                       <ArrowRight className="w-3.5 h-3.5" />
-                    </button>
+                    </div>
                   </div>
                 </div>
               </div>
@@ -735,13 +873,17 @@ export default function App() {
                       <option value="Idea">Core Concept</option>
                       <option value="Research">Research</option>
                     </select>
-                    <button
-                      type="button"
-                      onClick={handleAddDnaToDraft}
-                      className="bg-teal-400 text-zinc-950 font-semibold text-xs px-4 py-2 rounded-lg"
+                    <div
+                      draggable={Boolean(draft.dnaInputName.trim())}
+                      onDragStart={beginDrag({ type: "draft-dna" })}
+                      className={`flex items-center gap-1.5 font-semibold text-xs px-4 py-2 rounded-lg ${
+                        draft.dnaInputName.trim()
+                          ? "bg-teal-400 text-zinc-950 cursor-grab active:cursor-grabbing"
+                          : "bg-zinc-800 text-zinc-500 cursor-not-allowed"
+                      }`}
                     >
-                      Add Part
-                    </button>
+                      <GripVertical className="w-3.5 h-3.5" /> Drag to Stage DNA
+                    </div>
                   </div>
 
                   <div className="space-y-2 pt-2">
@@ -833,13 +975,13 @@ export default function App() {
                   Continue <ArrowRight className="w-3.5 h-3.5" />
                 </button>
               ) : (
-                <button
-                  type="button"
-                  onClick={handleFinishAutopsy}
-                  className="flex items-center gap-1.5 px-5 py-2 rounded-lg text-xs bg-teal-400 text-zinc-950 font-bold"
+                <div
+                  draggable
+                  onDragStart={beginDrag({ type: "save-autopsy" })}
+                  className="flex items-center gap-1.5 px-5 py-2 rounded-lg text-xs bg-teal-400 text-zinc-950 font-bold cursor-grab active:cursor-grabbing"
                 >
-                  <Check className="w-4 h-4" /> Commit Autopsy Record
-                </button>
+                  <GripVertical className="w-4 h-4" /> Drag to Commit Autopsy Record
+                </div>
               )}
             </div>
           </div>
@@ -878,8 +1020,10 @@ export default function App() {
                       <div
                         key={dna.id}
                         onMouseMove={handleCardMouseMove}
+                        draggable
+                        onDragStart={beginDrag({ type: "dna", dna })}
                         onClick={() => toggleDnaSelection(dna.id)}
-                        className={`spotlight-card cursor-pointer p-4 rounded-xl border transition ${
+                        className={`spotlight-card cursor-grab active:cursor-grabbing p-4 rounded-xl border transition ${
                           isSelected
                             ? "bg-teal-500/10 border-teal-400/60"
                             : "bg-zinc-900/50 border-zinc-800/90"
@@ -904,6 +1048,7 @@ export default function App() {
                           <span>{dna.name}</span>
                         </div>
                         <p className="text-xs text-zinc-400 mt-1 leading-relaxed">{dna.description}</p>
+                        <p className="text-[10px] mono text-teal-400/80 mt-2">Drag to Stage DNA zone</p>
                       </div>
                     );
                   })}
@@ -931,7 +1076,7 @@ export default function App() {
                   )}
                 </div>
 
-                <form onSubmit={handleCreateRecombination} className="space-y-3">
+                <div className="space-y-3">
                   <div>
                     <label className="block text-xs mono text-zinc-400 mb-1">New Project Title</label>
                     <input
@@ -953,19 +1098,24 @@ export default function App() {
                       className="w-full bg-zinc-950 border border-zinc-800 rounded-lg px-3.5 py-2 text-sm text-white focus:outline-none focus:border-teal-400"
                     />
                   </div>
-                  <button
-                    type="submit"
-                    disabled={selectedDnaIds.length < 2 || isSynthesizing}
-                    className="w-full py-2.5 rounded-lg bg-teal-400 hover:bg-teal-300 disabled:opacity-40 text-zinc-950 font-bold text-xs transition flex items-center justify-center gap-2"
+                  <div
+                    draggable={selectedDnaIds.length >= 2 && !isSynthesizing}
+                    onDragStart={beginDrag({ type: "synthesize" })}
+                    className={`w-full py-3 rounded-lg text-zinc-950 font-bold text-xs transition flex items-center justify-center gap-2 ${
+                      selectedDnaIds.length < 2 || isSynthesizing
+                        ? "bg-zinc-700 text-zinc-400 cursor-not-allowed"
+                        : "bg-teal-400 hover:bg-teal-300 cursor-grab active:cursor-grabbing"
+                    }`}
                   >
+                    <GripVertical className="w-4 h-4" />
                     <Sparkles className="w-4 h-4" />
                     <span>
                       {isSynthesizing
                         ? "Synthesizing Blueprint..."
-                        : `Recombine ${selectedDnaIds.length} Modules`}
+                        : `Drag to Synthesize ${selectedDnaIds.length} Modules`}
                     </span>
-                  </button>
-                </form>
+                  </div>
+                </div>
               </div>
             </div>
 
