@@ -51,6 +51,8 @@ export default function App() {
   const [filterReason, setFilterReason] = useState("ALL");
   const [isSynthesizing, setIsSynthesizing] = useState(false);
   const [dragOverZone, setDragOverZone] = useState(null);
+  const [draggedAction, setDraggedAction] = useState(null);
+  const [actionNotice, setActionNotice] = useState(null);
 
   // DNA Recombination Builder State
   const [selectedDnaIds, setSelectedDnaIds] = useState(["dna-101", "dna-201", "dna-301"]);
@@ -85,6 +87,15 @@ export default function App() {
     localStorage.setItem("recode_recomb_v1", JSON.stringify(recombinations));
   }, [recombinations]);
 
+  useEffect(() => {
+    const clearDragState = () => {
+      setDraggedAction(null);
+      setDragOverZone(null);
+    };
+    window.addEventListener("dragend", clearDragState);
+    return () => window.removeEventListener("dragend", clearDragState);
+  }, []);
+
   // Interactive Mouse Spotlight Tracker (Human-crafted detail)
   const handleCardMouseMove = (e) => {
     const rect = e.currentTarget.getBoundingClientRect();
@@ -96,56 +107,88 @@ export default function App() {
 
   // Canvas Protocol: primary actions happen by dragging cards into zones.
   const beginDrag = payload => event => {
+    setDraggedAction(payload.type);
     event.dataTransfer.effectAllowed = "move";
     event.dataTransfer.setData("application/recode-action", JSON.stringify(payload));
+  };
+
+  const endDrag = () => {
+    setDraggedAction(null);
+    setDragOverZone(null);
+  };
+
+  const showActionNotice = (message, tone = "success") => {
+    setActionNotice({ message, tone });
+    window.setTimeout(() => setActionNotice(null), 2600);
   };
 
   const handleCanvasDrop = (event, zone) => {
     event.preventDefault();
     setDragOverZone(null);
+    setDraggedAction(null);
     let payload;
     try {
       payload = JSON.parse(event.dataTransfer.getData("application/recode-action"));
     } catch {
+      showActionNotice("That card could not be read. Try dragging it again.", "error");
       return;
     }
 
     if (zone === "inspect" && payload.type === "project") {
       setSelectedProject(payload.project);
+      showActionNotice(`Inspecting ${payload.project.title}`);
       return;
     }
     if (zone === "autopsy" && payload.type === "open-autopsy") {
       setWizardStep(1);
       setActiveTab("autopsy");
+      showActionNotice("Autopsy workspace opened");
       return;
     }
     if (zone === "stage-dna" && payload.type === "dna") {
       toggleDnaSelection(payload.dna.id);
+      showActionNotice(`${payload.dna.name} staged for synthesis`);
       return;
     }
     if (zone === "stage-draft-dna" && payload.type === "draft-dna") {
-      handleAddDnaToDraft();
+      if (draft.dnaInputName.trim()) {
+        handleAddDnaToDraft();
+        showActionNotice("New DNA module staged");
+      } else {
+        showActionNotice("Add a module name before staging new DNA.", "error");
+      }
       return;
     }
     if (zone === "save" && payload.type === "save-autopsy") {
       handleFinishAutopsy();
+      showActionNotice("Autopsy record committed");
       return;
     }
     if (zone === "synthesize" && payload.type === "synthesize") {
-      handleCreateRecombination();
+      if (newSynthesisTitle.trim() && selectedDnaIds.length >= 2 && !isSynthesizing) {
+        handleCreateRecombination();
+        showActionNotice("Synthesis started");
+      } else {
+        showActionNotice("Choose two modules and add a project title first.", "error");
+      }
       return;
     }
     if (zone === "dna-lab" && payload.type === "go-dna") {
       setSelectedProject(null);
       setActiveTab("dna");
+      showActionNotice("DNA Lab opened");
       return;
     }
     if (zone === "patterns" && payload.type === "patterns") {
       setActiveTab("patterns");
+      showActionNotice("Failure Patterns opened");
+      return;
     }
+
+    showActionNotice("That card does not belong in this Action Zone.", "error");
   };
 
-  const canvasZone = (id, label, hint, accepts) => (
+  const canvasZone = (id, label, hint, acceptedType) => (
     <div
       onDragOver={event => {
         event.preventDefault();
@@ -157,14 +200,16 @@ export default function App() {
       className={`min-h-[74px] rounded-xl border border-dashed p-3 transition ${
         dragOverZone === id
           ? "border-teal-300 bg-teal-400/15 scale-[1.02]"
-          : "border-zinc-700 bg-zinc-950/60"
+          : draggedAction && draggedAction !== acceptedType
+            ? "border-zinc-800/60 bg-zinc-950/30 opacity-45"
+            : "border-zinc-700 bg-zinc-950/60"
       }`}
     >
       <div className="flex items-center gap-2 text-xs font-semibold text-white">
         <Target className="w-3.5 h-3.5 text-teal-400" />
         {label}
       </div>
-      <p className="text-[10px] text-zinc-500 mt-1">Drop {accepts} here</p>
+      <p className="text-[10px] text-zinc-500 mt-1">Drop {hint} here</p>
     </div>
   );
 
@@ -362,7 +407,7 @@ export default function App() {
       </header>
 
       {/* Surprise Challenge: Canvas Protocol */}
-      <section className="max-w-7xl mx-auto w-full px-4 sm:px-6 pt-5 relative z-10">
+       <section onDragEnd={endDrag} className="max-w-7xl mx-auto w-full px-4 sm:px-6 pt-5 relative z-10">
         <div className="rounded-2xl border border-teal-500/30 bg-teal-500/[0.06] p-4 sm:p-5 shadow-lg shadow-teal-950/20">
           <div className="flex flex-wrap items-start justify-between gap-4">
             <div>
@@ -410,17 +455,29 @@ export default function App() {
               )}
             </div>
           </div>
+          {actionNotice && (
+            <div
+              role="status"
+              className={`mt-3 rounded-lg border px-3 py-2 text-xs ${
+                actionNotice.tone === "error"
+                  ? "border-rose-500/30 bg-rose-500/10 text-rose-200"
+                  : "border-teal-500/30 bg-teal-500/10 text-teal-200"
+              }`}
+            >
+              {actionNotice.message}
+            </div>
+          )}
           <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2 mt-4">
-            {canvasZone("inspect", "Inspect", "a project card", "a project card")}
-            {canvasZone("autopsy", "Start Autopsy", "the New Autopsy card", "the New Autopsy card")}
-            {canvasZone("stage-dna", "Stage DNA", "a DNA card", "a DNA card")}
-            {canvasZone("save", "Commit Record", "the Commit Autopsy card", "the Commit Autopsy card")}
-            {canvasZone("synthesize", "Synthesize", "the Synthesize MVP card", "the Synthesize MVP card")}
-            {canvasZone("patterns", "View Patterns", "the Failure Patterns card", "the Failure Patterns card")}
+            {canvasZone("inspect", "Inspect", "a project card", "project")}
+            {canvasZone("autopsy", "Start Autopsy", "the New Autopsy card", "open-autopsy")}
+            {canvasZone("stage-dna", "Stage DNA", "a DNA card", "dna")}
+            {canvasZone("save", "Commit Record", "the Commit Autopsy card", "save-autopsy")}
+            {canvasZone("synthesize", "Synthesize", "the Synthesize MVP card", "synthesize")}
+            {canvasZone("patterns", "View Patterns", "the Failure Patterns card", "patterns")}
             {activeTab === "autopsy" && wizardStep === 4 &&
-              canvasZone("stage-draft-dna", "Stage New DNA", "the draft DNA card", "the draft DNA card")}
+              canvasZone("stage-draft-dna", "Stage New DNA", "the draft DNA card", "draft-dna")}
             {selectedProject &&
-              canvasZone("dna-lab", "Open DNA Lab", "the dossier card", "the dossier card")}
+              canvasZone("dna-lab", "Open DNA Lab", "the dossier card", "go-dna")}
           </div>
         </div>
       </section>
