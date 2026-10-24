@@ -1243,9 +1243,6 @@ export default function App() {
         )}
       </main>
 
-      <footer className="border-t border-zinc-900 py-5 mt-12 text-center text-xs text-zinc-500 mono">
-        RE:CODE · Built by Team Fork & Revive
-      </footer>
     </div>
   );
 }
